@@ -7,6 +7,135 @@ from langchain.prompts import PromptTemplate
 from datetime import datetime
 import os
 
+# --- 1. Frontend con Streamlit ---
+
+st.title("Asistente Legal con Agentes de IA")
+
+# Inicialización de variables de sesión
+if 'chat_history' not in st.session_state:
+    st.session_state['chat_history'] = []
+if 'retrieved_evidence' not in st.session_state:
+    st.session_state['retrieved_evidence'] = []
+
+# Área de chat
+user_query = st.text_input("Pregunta al asistente legal:")
+
+# Sección para mostrar las evidencias recuperadas
+st.subheader("Evidencias Utilizadas")
+if st.session_state['retrieved_evidence']:
+    for i, evidence in enumerate(st.session_state['retrieved_evidence']):
+        st.markdown(f"**Fragmento {i+1}:** {evidence}")
+else:
+    st.info("Las evidencias de la respuesta aparecerán aquí.")
+
+# Área para mostrar el historial del chat
+st.subheader("Historial del Chat")
+for message in st.session_state['chat_history']:
+    if "user" in message:
+        st.markdown(f"**Usuario:** {message['user']}")
+    elif "assistant" in message:
+        st.markdown(f"**Asistente:** {message['assistant']}")
+
+# --- 2. Agentes de IA (Implementaciones Simplificadas - Backend Parcial) ---
+
+class GuardrailsAgent:
+    def __init__(self, policies=None):
+        self.policies = policies if policies is not None else [
+            "No responder preguntas fuera del ámbito legal.",
+            "Evitar contenido sensible o inapropiado."
+        ]
+
+    def analyze_query(self, query):
+        if any(policy.lower() in query.lower() for policy in ["chiste", "broma", "ilegal"]):
+            return False, "La pregunta no cumple con las políticas."
+        return True, None
+
+class RetrieverAgent:
+    def __init__(self, documents=None):
+        self.documents = documents if documents is not None else ["Este es un documento legal de ejemplo."]
+        self.vector_store = self._create_vector_store()
+
+    def _create_vector_store(self):
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            st.error("La clave de API de OpenAI no está configurada. Por favor, configúrala en Streamlit Cloud Secrets.")
+            st.stop()
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+        return FAISS.from_texts(self.documents, embeddings)
+
+    def retrieve_relevant_fragments(self, query, k=3):
+        if self.vector_store:
+            retriever = self.vector_store.as_retriever(search_kwargs={"k": k})
+            relevant_documents = retriever.get_relevant_documents(query)
+            return [doc.page_content for doc in relevant_documents]
+        return []
+
+class GeneratorAgent:
+    def __init__(self, model_name="gpt-3.5-turbo-instruct"):
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            st.error("La clave de API de OpenAI no está configurada. Por favor, configúrala en Streamlit Cloud Secrets.")
+            st.stop()
+        self.llm = OpenAI(model_name=model_name, openai_api_key=openai_api_key)
+        self.prompt_template = PromptTemplate(
+            template="""Utiliza los siguientes fragmentos de documentos para responder a la pregunta.
+Si la respuesta no se encuentra en los documentos, responde de forma concisa que no tienes la información.
+Pregunta: {question}
+Fragmentos:
+{context}
+Respuesta:""",
+            input_variables=["context", "question"]
+        )
+
+    def generate_response(self, query, context_fragments):
+        context = "\n".join(context_fragments)
+        prompt = self.prompt_template.format(context=context, question=query)
+        response = self.llm(prompt)
+        return response.strip()
+
+# --- 3. Flujo de Procesamiento (Parcial - Solo Frontend y Activación) ---
+
+# Inicialización de los agentes
+guardrails_agent = GuardrailsAgent()
+retriever_agent = RetrieverAgent(documents=[
+    "El artículo 1 de la ley establece...",
+    "La jurisprudencia del Tribunal Supremo indica que...",
+    "Según el contrato firmado el...",
+    "No hay información relevante sobre este tema en la base de datos."
+])
+generator_agent = GeneratorAgent()
+
+if user_query:
+    st.session_state['chat_history'].append({"user": user_query})
+
+    # Preprocesamiento y Control
+    is_valid, reason = guardrails_agent.analyze_query(user_query)
+    if not is_valid:
+        st.error(f"Pregunta no válida: {reason}")
+    else:
+        with st.spinner("Buscando información..."):
+            # Recuperación de Información
+            relevant_fragments = retriever_agent.retrieve_relevant_fragments(user_query)
+            st.session_state['retrieved_evidence'] = relevant_fragments
+
+        with st.spinner("Generando respuesta..."):
+            # Generación de la Respuesta
+            legal_response = generator_agent.generate_response(user_query, relevant_fragments)
+            st.session_state['chat_history'].append({"assistant": legal_response})
+
+            # --- 4. Almacenamiento y Evaluación (Omitido por ahora) ---
+            pass
+
+    # --- 5. Consideraciones Técnicas (Comentarios) ---
+    passimport streamlit as st
+from langchain.llms import OpenAI  # Ejemplo de LLM comercial
+from langchain.embeddings import OpenAIEmbeddings  # Ejemplo de embeddings comercial
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+from datetime import datetime
+import os
+
 # --- 1. Frontend y Backend Unificados con Streamlit ---
 
 st.title("Asistente Legal con Agentes de IA")
