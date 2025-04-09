@@ -35,7 +35,7 @@ for message in st.session_state['chat_history']:
 # --- 2. Configuración del Asistente de OpenAI ---
 
 # *** Reemplaza con el ID de tu asistente creado en OpenAI ***
-ASSISTANT_ID = "asst_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ASSISTANT_ID = "asst_9kfpSYaEJLSDcPlb1f9nt9MF"
 
 # Inicializar el cliente de OpenAI
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
